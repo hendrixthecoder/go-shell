@@ -20,11 +20,25 @@ func main() {
 		command := commandLn[:len(commandLn)-1]
 
 		cmdParts := strings.Split(command, " ")
-		if len(cmdParts) > 1 && cmdParts[0] == "exit" {
-			n, _ := strconv.Atoi(cmdParts[1])
-			os.Exit(n)
+		if len(cmdParts) < 2 {
+			fmt.Println(command + ": command not found")
+			continue
 		}
 
-		fmt.Println(command + ": command not found")
+		switch cmdParts[0] {
+		case "exit":
+			n, _ := strconv.Atoi(cmdParts[1])
+			os.Exit(n)
+		case "echo":
+			args := make([]any, len(cmdParts[1:]))
+
+			for i, v := range cmdParts[1:] {
+				args[i] = v
+			}
+
+			fmt.Fprintln(os.Stdout, args...)
+		default:
+			fmt.Println(cmdParts[0] + ": command not found")
+		}
 	}
 }
