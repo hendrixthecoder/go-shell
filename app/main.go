@@ -21,7 +21,6 @@ func main() {
 		}
 
 		command := commandLn[:len(commandLn)-1]
-
 		cmdParts := strings.Split(command, " ")
 
 		switch cmdParts[0] {
@@ -61,9 +60,35 @@ func main() {
 			target := cmdParts[1]
 
 			if slices.Contains(BUILTIN, target) {
-				fmt.Println(target + " is a shell builtin")
-			} else {
-				fmt.Println(target + ": not found")
+				fmt.Printf("%s is a shell builtin\n", target)
+				continue
+			}
+
+			pathVar := os.Getenv("PATH")
+			dirs := strings.Split(pathVar, string(os.PathListSeparator))
+
+			found := false
+			for _, dir := range dirs {
+				full := dir + string(os.PathSeparator) + target
+
+				info, err := os.Stat(full)
+				if err != nil {
+					continue
+				}
+
+				if info.IsDir() {
+					continue
+				}
+
+				if info.Mode()&0111 != 0 {
+					fmt.Printf("%s is %s\n", target, full)
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				fmt.Printf("%s: not found\n", target)
 			}
 
 		default:
