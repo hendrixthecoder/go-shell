@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 )
@@ -63,35 +64,30 @@ func main() {
 				continue
 			}
 
-			pathVar := os.Getenv("PATH")
-			dirs := strings.Split(pathVar, string(os.PathListSeparator))
-
-			found := false
-			for _, dir := range dirs {
-				full := dir + string(os.PathSeparator) + target
-
-				info, err := os.Stat(full)
-				if err != nil {
-					continue
-				}
-
-				if info.IsDir() {
-					continue
-				}
-
-				if info.Mode()&0111 != 0 {
-					fmt.Printf("%s is %s\n", target, full)
-					found = true
-					break
-				}
+			path, err := exec.LookPath(target)
+			if err != nil {
+				fmt.Println(target + ": command not found")
+				continue
+			} else {
+				fmt.Printf("%s is %s\n", target, path)
 			}
-
-			if !found {
-				fmt.Printf("%s: not found\n", target)
-			}
-
 		default:
-			fmt.Println(cmdParts[0] + ": command not found")
+			path, err := exec.LookPath(cmdParts[0])
+			if err != nil {
+				fmt.Println(cmdParts[0] + ": command not found")
+				continue
+			} else {
+				cmd := exec.Command(path, cmdParts[1:]...)
+
+				// Connect the command's output to the shell's output
+				cmd.Stderr = os.Stderr
+				cmd.Stdout = os.Stdout
+
+				err := cmd.Run()
+				if err != nil {
+					fmt.Printf("%s: %v\n", cmdParts[0], err)
+				}
+			}
 		}
 	}
 }
