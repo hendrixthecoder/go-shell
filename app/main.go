@@ -72,12 +72,12 @@ func main() {
 				fmt.Printf("%s is %s\n", target, path)
 			}
 		default:
-			path, err := exec.LookPath(cmdParts[0])
+			_, err := exec.LookPath(cmdParts[0])
 			if err != nil {
 				fmt.Println(cmdParts[0] + ": command not found")
 				continue
 			} else {
-				cmd := exec.Command(path, cmdParts[1:]...)
+				cmd := exec.Command(cmdParts[0], cmdParts[1:]...)
 
 				// Connect the command's output to the shell's output
 				cmd.Stderr = os.Stderr
