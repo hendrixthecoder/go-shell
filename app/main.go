@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"slices"
-	"strconv"
 	"strings"
 )
 
@@ -25,18 +24,18 @@ func main() {
 
 		switch cmdParts[0] {
 		case "exit":
-			if len(cmdParts) < 2 {
-				fmt.Println("exit: requires an argument.")
-				continue
-			}
+			// if len(cmdParts) < 2 {
+			// 	fmt.Println("exit: requires an argument.")
+			// 	continue
+			// }
 
-			n, err := strconv.Atoi(cmdParts[1])
-			if err != nil {
-				fmt.Println("exit: invalid exit code.")
-				continue
-			}
+			// n, err := strconv.Atoi(cmdParts[1])
+			// if err != nil {
+			// 	fmt.Println("exit: invalid exit code.")
+			// 	continue
+			// }
 
-			os.Exit(n)
+			os.Exit(0)
 
 		case "echo":
 			if len(cmdParts) < 2 {
