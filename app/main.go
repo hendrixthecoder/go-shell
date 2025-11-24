@@ -66,7 +66,7 @@ func main() {
 
 			path, err := exec.LookPath(target)
 			if err != nil {
-				fmt.Println(target + ": command not found")
+				fmt.Println(target + ": not found")
 				continue
 			} else {
 				fmt.Printf("%s is %s\n", target, path)
@@ -74,7 +74,7 @@ func main() {
 		default:
 			_, err := exec.LookPath(cmdParts[0])
 			if err != nil {
-				fmt.Println(cmdParts[0] + ": command not found")
+				fmt.Println(cmdParts[0] + ": not found")
 				continue
 			} else {
 				cmd := exec.Command(cmdParts[0], cmdParts[1:]...)
