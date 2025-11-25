@@ -22,7 +22,44 @@ func initialize() []string {
 	}
 
 	line = strings.TrimSpace(line)
-	return strings.Split(line, " ")
+
+	hasQuote := strings.Contains(line, "'")
+	if !hasQuote {
+		return strings.Split(line, " ")
+	}
+
+	return parseQuotedLine(line, "'")
+}
+
+func parseQuotedLine(line string, delimiter string) []string {
+	word := ""
+	words := []string{}
+	inQuote := false
+
+	for _, char := range line {
+		if string(char) == delimiter {
+			inQuote = !inQuote
+
+			if word != "" {
+				words = append(words, word)
+				word = ""
+			}
+
+			continue
+		} else if string(char) == " " && !inQuote {
+			// Since we are not in quotes and the char is an empty space
+			// it can be ignored as it is a separation.
+			if word != "" {
+				words = append(words, word)
+				word = ""
+				inQuote = false
+			}
+		} else {
+			word += string(char)
+		}
+	}
+
+	return words
 }
 
 func handleTypeBuiltin(parts []string) (string, error) {
