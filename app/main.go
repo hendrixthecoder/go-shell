@@ -49,7 +49,14 @@ func handleEchoBuiltin(parts []string) (string, error) {
 		return "", errors.New("echo: requires an argument")
 	}
 
-	return strings.ReplaceAll(strings.Join(parts[1:], " "), "'", "") + "\n", nil
+	args := strings.Join(parts[1:], " ")
+
+	hasQuote := strings.Contains(args, "'")
+	if hasQuote {
+		return strings.ReplaceAll(args, "'", "") + "\n", nil
+	}
+
+	return strings.Join(strings.Fields(args), " ") + "\n", nil
 }
 
 func handleDefault(parts []string) (string, error) {
