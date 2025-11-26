@@ -14,57 +14,95 @@ var BUILTIN = []string{"type", "echo", "exit"}
 
 func initialize() string {
 	fmt.Fprint(os.Stdout, "$ ")
-
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "error reading input:", err)
 		os.Exit(1)
 	}
-
-	line = strings.TrimSpace(line)
-	return line
+	return strings.TrimSpace(line)
 }
 
-func parseQuotedLine(line string, delimiter string) []string {
-	word := ""
+//
+// Helpers
+//
+
+var hasPrecedingDelimiter = func(idx int, line string, delim string) bool {
+	return idx > 0 && string(line[idx-1]) == delim
+}
+
+var hasSucceedingDelimiter = func(idx int, line string, delim string) bool {
+	return idx+1 < len(line) && string(line[idx+1]) == delim
+}
+
+//
+// Quoted parser
+//
+
+func parseQuotedLine(line string) []string {
+	single := `'`
+	double := `"`
+
 	words := []string{}
-	inQuote := false
+	word := ""
 
-	hasPrecedingDelimiter := func(currIdx int, line string, lineLen int, delimiter string) bool {
-		return currIdx+1 < lineLen && string(line[currIdx-1]) == delimiter
-	}
+	inSingleQuotes := false
+	inDoubleQuotes := false
+	lineLen := len(line)
 
-	hasSucceedingDelimiter := func(currIdx int, line string, lineLen int, delimiter string) bool {
-		return currIdx+1 < lineLen && string(line[currIdx+1]) == delimiter
-	}
+	for idx, r := range line {
+		ch := string(r)
 
-	for idx, char := range line {
-		if string(char) == delimiter {
-			// So we can continue capturing characters.
-			if hasPrecedingDelimiter(idx, line, len(line), delimiter) || hasSucceedingDelimiter(idx, line, len(line), delimiter) {
+		// ----------------------------------------
+		// Double quotes
+		// ----------------------------------------
+		if ch == double {
+			if hasPrecedingDelimiter(idx, line, double) || hasSucceedingDelimiter(idx, line, double) {
 				continue
 			}
 
-			inQuote = !inQuote
-
+			inDoubleQuotes = !inDoubleQuotes
 			if word != "" {
 				words = append(words, word)
 				word = ""
 			}
-		} else if string(char) == " " && !inQuote {
-			// Since we are not in quotes and the char is an empty space
-			// it can be ignored as it is a separation.
-			if word != "" {
-				words = append(words, word)
-				word = ""
-				inQuote = false
-			}
-		} else {
-			word += string(char)
+			continue
 		}
 
-		// Cases where there's a word at the last char not appended.
-		if idx == len(line)-1 && word != "" {
+		// ----------------------------------------
+		// Single quotes
+		// ----------------------------------------
+		if ch == single && !inDoubleQuotes {
+			if hasPrecedingDelimiter(idx, line, single) || hasSucceedingDelimiter(idx, line, single) {
+				continue
+			}
+
+			inSingleQuotes = !inSingleQuotes
+			if word != "" {
+				words = append(words, word)
+				word = ""
+			}
+			continue
+		}
+
+		// ----------------------------------------
+		// Space outside any quote
+		// ----------------------------------------
+		if ch == " " && !inSingleQuotes && !inDoubleQuotes {
+			if word != "" {
+				words = append(words, word)
+				word = ""
+				inSingleQuotes = false
+			}
+			continue
+		}
+
+		// ----------------------------------------
+		// Normal character
+		// ----------------------------------------
+		word += ch
+
+		// final word at end of line
+		if idx == lineLen-1 && word != "" {
 			words = append(words, word)
 		}
 	}
@@ -92,17 +130,20 @@ func handleTypeBuiltin(parts []string) (string, error) {
 }
 
 func handleEchoBuiltin(line string) (string, error) {
-	if len(line) < 2 {
+	parts := parseQuotedLine(line)
+	if len(parts) < 2 {
 		return "", errors.New("echo: requires an argument")
 	}
-
-	parts := parseQuotedLine(line, "'")
 
 	return strings.Join(parts[1:], " ") + "\n", nil
 }
 
 func handleDefault(line string) (string, error) {
-	parts := parseQuotedLine(line, "'")
+	parts := parseQuotedLine(line)
+	if len(parts) == 0 {
+		return "", fmt.Errorf("invalid command")
+	}
+
 	_, err := exec.LookPath(parts[0])
 	if err != nil {
 		return "", fmt.Errorf("%s: not found", parts[0])
@@ -116,15 +157,12 @@ func handleDefault(line string) (string, error) {
 		return "", fmt.Errorf("%s: %v", parts[0], err)
 	}
 
-	// Command printed its own output, so nothing to return
 	return "", nil
 }
 
 func execute(line string) {
-	var (
-		out string
-		err error
-	)
+	var out string
+	var err error
 
 	parts := strings.Split(line, " ")
 
@@ -158,7 +196,6 @@ func main() {
 		if line == "" {
 			continue
 		}
-
 		execute(line)
 	}
 }
