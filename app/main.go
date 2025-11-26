@@ -143,7 +143,7 @@ func execute(line string) {
 	}
 
 	if err != nil {
-		fmt.Println(err.Error() + ".")
+		fmt.Println(err.Error())
 		return
 	}
 
