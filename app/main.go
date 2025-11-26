@@ -40,8 +40,7 @@ func parseQuotedLine(line string, delimiter string) []string {
 
 	for idx, char := range line {
 		if string(char) == delimiter {
-			// If delimiter is succeeded or preceeded by another we don't need
-			// to switch the flag so it can continue capturing characters.
+			// So we can continue capturing characters.
 			if hasPrecedingDelimiter(idx, line, len(line), delimiter) || hasSucceedingDelimiter(idx, line, len(line), delimiter) {
 				continue
 			}
@@ -102,7 +101,8 @@ func handleEchoBuiltin(line string) (string, error) {
 	return strings.Join(parts[1:], " ") + "\n", nil
 }
 
-func handleDefault(parts []string) (string, error) {
+func handleDefault(line string) (string, error) {
+	parts := parseQuotedLine(line, "'")
 	_, err := exec.LookPath(parts[0])
 	if err != nil {
 		return "", fmt.Errorf("%s: not found", parts[0])
@@ -139,7 +139,7 @@ func execute(line string) {
 		out, err = handleTypeBuiltin(parts)
 
 	default:
-		out, err = handleDefault(parts)
+		out, err = handleDefault(line)
 	}
 
 	if err != nil {
