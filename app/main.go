@@ -12,7 +12,7 @@ import (
 
 var BUILTIN = []string{"type", "echo", "exit"}
 
-func initialize() []string {
+func initialize() string {
 	fmt.Fprint(os.Stdout, "$ ")
 
 	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -22,13 +22,7 @@ func initialize() []string {
 	}
 
 	line = strings.TrimSpace(line)
-
-	hasQuote := strings.Contains(line, "'")
-	if !hasQuote {
-		return strings.Split(line, " ")
-	}
-
-	return parseQuotedLine(line, "'")
+	return line
 }
 
 func parseQuotedLine(line string, delimiter string) []string {
@@ -36,16 +30,28 @@ func parseQuotedLine(line string, delimiter string) []string {
 	words := []string{}
 	inQuote := false
 
-	for _, char := range line {
+	hasPrecedingDelimiter := func(currIdx int, line string, lineLen int, delimiter string) bool {
+		return currIdx+1 < lineLen && string(line[currIdx-1]) == delimiter
+	}
+
+	hasSucceedingDelimiter := func(currIdx int, line string, lineLen int, delimiter string) bool {
+		return currIdx+1 < lineLen && string(line[currIdx+1]) == delimiter
+	}
+
+	for idx, char := range line {
 		if string(char) == delimiter {
+			// If delimiter is succeeded or preceeded by another we don't need
+			// to switch the flag so it can continue capturing characters.
+			if hasPrecedingDelimiter(idx, line, len(line), delimiter) || hasSucceedingDelimiter(idx, line, len(line), delimiter) {
+				continue
+			}
+
 			inQuote = !inQuote
 
 			if word != "" {
 				words = append(words, word)
 				word = ""
 			}
-
-			continue
 		} else if string(char) == " " && !inQuote {
 			// Since we are not in quotes and the char is an empty space
 			// it can be ignored as it is a separation.
@@ -56,6 +62,11 @@ func parseQuotedLine(line string, delimiter string) []string {
 			}
 		} else {
 			word += string(char)
+		}
+
+		// Cases where there's a word at the last char not appended.
+		if idx == len(line)-1 && word != "" {
+			words = append(words, word)
 		}
 	}
 
@@ -81,19 +92,14 @@ func handleTypeBuiltin(parts []string) (string, error) {
 	return fmt.Sprintf("%s is %s\n", target, path), nil
 }
 
-func handleEchoBuiltin(parts []string) (string, error) {
-	if len(parts) < 2 {
+func handleEchoBuiltin(line string) (string, error) {
+	if len(line) < 2 {
 		return "", errors.New("echo: requires an argument")
 	}
 
-	args := strings.Join(parts[1:], " ")
+	parts := parseQuotedLine(line, "'")
 
-	hasQuote := strings.Contains(args, "'")
-	if hasQuote {
-		return strings.ReplaceAll(args, "'", "") + "\n", nil
-	}
-
-	return strings.Join(strings.Fields(args), " ") + "\n", nil
+	return strings.Join(parts[1:], " ") + "\n", nil
 }
 
 func handleDefault(parts []string) (string, error) {
@@ -114,18 +120,20 @@ func handleDefault(parts []string) (string, error) {
 	return "", nil
 }
 
-func execute(parts []string) {
+func execute(line string) {
 	var (
 		out string
 		err error
 	)
+
+	parts := strings.Split(line, " ")
 
 	switch parts[0] {
 	case "exit":
 		os.Exit(0)
 
 	case "echo":
-		out, err = handleEchoBuiltin(parts)
+		out, err = handleEchoBuiltin(line)
 
 	case "type":
 		out, err = handleTypeBuiltin(parts)
@@ -146,10 +154,11 @@ func execute(parts []string) {
 
 func main() {
 	for {
-		parts := initialize()
-		if len(parts) == 0 || parts[0] == "" {
+		line := initialize()
+		if line == "" {
 			continue
 		}
-		execute(parts)
+
+		execute(line)
 	}
 }
