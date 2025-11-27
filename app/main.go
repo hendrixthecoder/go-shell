@@ -39,72 +39,70 @@ var hasSucceedingDelimiter = func(idx int, line string, delim string) bool {
 //
 
 func parseQuotedLine(line string) []string {
-	single := `'`
-	double := `"`
+	var words []string
+	var buf []rune
 
-	words := []string{}
-	word := ""
+	inSingle := false
+	inDouble := false
+	escaping := false
 
-	inSingleQuotes := false
-	inDoubleQuotes := false
-	lineLen := len(line)
-
-	for idx, r := range line {
-		ch := string(r)
+	for _, r := range line {
+		switch {
+		// ----------------------------------------
+		// ESCAPING MODE
+		// ----------------------------------------
+		case escaping:
+			// In escaping mode, the character is always literal
+			buf = append(buf, r)
+			escaping = false
+			continue
 
 		// ----------------------------------------
-		// Double quotes
+		// BACKSLASH HANDLING
 		// ----------------------------------------
-		if ch == double {
-			if hasPrecedingDelimiter(idx, line, double) || hasSucceedingDelimiter(idx, line, double) {
+		case r == '\\':
+			// Inside ANY quotes → literal backslash
+			if inSingle || inDouble {
+				buf = append(buf, r)
 				continue
 			}
 
-			inDoubleQuotes = !inDoubleQuotes
-			if word != "" {
-				words = append(words, word)
-				word = ""
+			// Outside quotes → escape next char
+			escaping = true
+			continue
+
+		// ----------------------------------------
+		// SINGLE QUOTES
+		// ----------------------------------------
+		case r == '\'' && !inDouble:
+			inSingle = !inSingle
+			continue
+
+		// ----------------------------------------
+		// DOUBLE QUOTES
+		// ----------------------------------------
+		case r == '"' && !inSingle:
+			inDouble = !inDouble
+			continue
+
+		// ----------------------------------------
+		// SPACE HANDLING
+		// ----------------------------------------
+		case r == ' ' && !inSingle && !inDouble:
+			if len(buf) > 0 {
+				words = append(words, string(buf))
+				buf = nil
 			}
 			continue
 		}
 
-		// ----------------------------------------
-		// Single quotes
-		// ----------------------------------------
-		if ch == single && !inDoubleQuotes {
-			if hasPrecedingDelimiter(idx, line, single) || hasSucceedingDelimiter(idx, line, single) {
-				continue
-			}
-
-			inSingleQuotes = !inSingleQuotes
-			if word != "" {
-				words = append(words, word)
-				word = ""
-			}
-			continue
-		}
-
-		// ----------------------------------------
-		// Space outside any quote
-		// ----------------------------------------
-		if ch == " " && !inSingleQuotes && !inDoubleQuotes {
-			if word != "" {
-				words = append(words, word)
-				word = ""
-				inSingleQuotes = false
-			}
-			continue
-		}
-
-		// ----------------------------------------
 		// Normal character
-		// ----------------------------------------
-		word += ch
+		buf = append(buf, r)
+	}
 
-		// final word at end of line
-		if idx == lineLen-1 && word != "" {
-			words = append(words, word)
-		}
+	// Flush last word
+	if len(buf) > 0 {
+		words = append(words, string(buf))
 	}
 
 	return words
