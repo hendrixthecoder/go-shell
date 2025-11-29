@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"slices"
 	"strings"
 )
 
@@ -23,10 +22,10 @@ func initialize() string {
 }
 
 //
-// Quoted parser
+// Line parser
 //
 
-func parseQuotedLine(line string) []string {
+func parseLine(line string) (string, []string) {
 	var words []string
 	var buf []rune
 
@@ -37,9 +36,7 @@ func parseQuotedLine(line string) []string {
 	for _, r := range line {
 		switch {
 
-		// ESCAPING MODE
 		case escaping:
-			// If inside double quotes, only escape " and \
 			if inDouble {
 				switch r {
 				case '"', '\\':
@@ -50,32 +47,25 @@ func parseQuotedLine(line string) []string {
 			} else {
 				buf = append(buf, r)
 			}
-
 			escaping = false
 			continue
 
-		// BACKSLASH
 		case r == '\\':
 			if inSingle {
-				// literal inside single quotes
 				buf = append(buf, r)
 			} else {
 				escaping = true
 			}
-
 			continue
 
-		// SINGLE QUOTES
 		case r == '\'' && !inDouble:
 			inSingle = !inSingle
 			continue
 
-		// DOUBLE QUOTES
 		case r == '"' && !inSingle:
 			inDouble = !inDouble
 			continue
 
-		// WHITESPACE SPLITTING
 		case r == ' ' && !inSingle && !inDouble:
 			if len(buf) > 0 {
 				words = append(words, string(buf))
@@ -84,7 +74,6 @@ func parseQuotedLine(line string) []string {
 			continue
 		}
 
-		// normal character
 		buf = append(buf, r)
 	}
 
@@ -92,58 +81,76 @@ func parseQuotedLine(line string) []string {
 		words = append(words, string(buf))
 	}
 
-	return words
+	if len(words) == 0 {
+		return "", []string{}
+	}
+
+	return words[0], words[1:]
 }
 
 //
 // Builtins
 //
 
-func handleTypeBuiltin(parts []string) (string, error) {
-	if len(parts) < 2 {
-		return "", errors.New("type: requires an argument")
+func handleTypeBuiltin(args []string) {
+	if len(args) < 2 {
+		fmt.Println("type: missing argument")
+		return
 	}
 
-	target := parts[1]
+	name := args[1]
 
-	if slices.Contains(BUILTIN, target) {
-		return fmt.Sprintf("%s is a shell builtin\n", target), nil
+	for _, b := range BUILTIN {
+		if b == name {
+			fmt.Printf("%s is a shell builtin\n", name)
+			return
+		}
 	}
 
-	path, err := exec.LookPath(target)
-	if err != nil {
-		return "", fmt.Errorf("%s: not found", target)
+	path, err := exec.LookPath(name)
+	if err == nil {
+		fmt.Printf("%s is %s\n", name, path)
+		return
 	}
 
-	return fmt.Sprintf("%s is %s\n", target, path), nil
+	fmt.Printf("%s: not found\n", name)
 }
 
-func handleEchoBuiltin(parts []string) (string, error) {
+func handleEchoBuiltin(parts []string) error {
 	if len(parts) < 2 {
-		return "", errors.New("echo: requires an argument")
+		return errors.New("echo: requires an argument")
 	}
-	return strings.Join(parts[1:], " ") + "\n", nil
+
+	// match expected behavior: no trailing newline for redirect tests
+	fmt.Fprintln(os.Stdout, strings.Join(parts[1:], " "))
+	return nil
 }
 
-func handleDefault(parts []string) (string, error) {
+func handleDefault(parts []string) error {
 	if len(parts) == 0 {
-		return "", fmt.Errorf("invalid command")
+		return fmt.Errorf("invalid command")
 	}
 
-	_, err := exec.LookPath(parts[0])
+	path, err := exec.LookPath(parts[0])
 	if err != nil {
-		return "", fmt.Errorf("%s: not found", parts[0])
+		return fmt.Errorf("%s: not found", parts[0])
 	}
 
-	cmd := exec.Command(parts[0], parts[1:]...)
-	cmd.Stderr = os.Stderr
+	cmd := exec.Command(path, parts[1:]...)
+	cmd.Args[0] = parts[0] // critical: program sees correct argv[0]
+
 	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s: %v", parts[0], err)
+	err = cmd.Run()
+
+	// swallow "exit status X"
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return nil
 	}
 
-	return "", nil
+	return err
 }
 
 //
@@ -151,35 +158,59 @@ func handleDefault(parts []string) (string, error) {
 //
 
 func execute(line string) {
-	parts := parseQuotedLine(line)
-	if len(parts) == 0 {
+	command, arguments := parseLine(line)
+	if command == "" {
 		return
 	}
 
-	var out string
+	originalStdout := os.Stdout
+
+	var outputFile *os.File
+	for i, arg := range arguments {
+		if (arg == ">" || arg == "1>") && i+1 < len(arguments) {
+			file, err := os.Create(arguments[i+1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating file: %v\n", err)
+				return
+			}
+
+			outputFile = file
+			arguments = arguments[:i] // remove redirection
+			break
+		}
+	}
+
+	if outputFile != nil {
+		os.Stdout = outputFile
+	}
+
+	parts := append([]string{command}, arguments...)
 	var err error
 
-	switch parts[0] {
+	switch command {
 	case "exit":
 		os.Exit(0)
 
 	case "echo":
-		out, err = handleEchoBuiltin(parts)
+		err = handleEchoBuiltin(parts)
 
 	case "type":
-		out, err = handleTypeBuiltin(parts)
+		handleTypeBuiltin(parts)
 
 	default:
-		out, err = handleDefault(parts)
+		err = handleDefault(parts)
+	}
+
+	if outputFile != nil {
+		outputFile.Close()
+		os.Stdout = originalStdout
 	}
 
 	if err != nil {
-		fmt.Println(err.Error())
-		return
-	}
-
-	if out != "" {
-		fmt.Print(out)
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
+			fmt.Fprintln(os.Stderr, err.Error())
+		}
 	}
 }
 
